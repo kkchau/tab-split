@@ -6,17 +6,57 @@ never leaves the browser — recognition runs on the device.
 
 ## Hosting it on GitHub Pages
 
-The repository root *is* the site, so there is nothing to build.
+The repository root *is* the site, so there is nothing to build and no
+workflow to run.
 
-1. Push this branch and merge it (or make it the default branch).
-2. **Settings → Pages → Build and deployment → Source: GitHub Actions.**
-3. The `Deploy to GitHub Pages` workflow runs on every push and publishes to
-   `https://<user>.github.io/<repo>/`.
+1. **Settings → Pages → Build and deployment → Source: Deploy from a branch.**
+2. Pick the branch and folder `/ (root)`, then Save.
+3. A minute later the site is at `https://<user>.github.io/<repo>/`. Every
+   later push to that branch republishes it.
 
-To deploy without Actions instead, set **Source: Deploy from a branch**, pick
-the branch and `/ (root)`. The `.nojekyll` file is what stops Jekyll from
-swallowing `_headers` and any future underscore-prefixed paths, so keep it
-either way.
+`.nojekyll` is what stops Jekyll from swallowing `_headers` and any future
+underscore-prefixed path, so keep it.
+
+<details>
+<summary>Deploying with GitHub Actions instead</summary>
+
+Only worth it if you later add a build step. Save this as
+`.github/workflows/deploy-pages.yml`, then set **Source: GitHub Actions**:
+
+```yaml
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: .
+      - id: deployment
+        uses: actions/deploy-pages@v4
+```
+
+</details>
 
 Every path in the app is relative, so a project page under
 `https://<user>.github.io/<repo>/` works exactly like a site at a domain root —
@@ -84,5 +124,4 @@ You can also set the paths by hand under Settings.
     manifest.webmanifest          install metadata
     icons/                        app icons
     .nojekyll                     serve files as-is on GitHub Pages
-    .github/workflows/            Pages deploy
     _headers                      Netlify cache rule; ignored by Pages
