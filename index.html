@@ -228,7 +228,6 @@ details.tools[open] summary::before{content:"– ";}
 .tools p{font-size:12px;color:var(--faded);line-height:1.55}
 .tools code{padding:1px 4px;font-size:11.5px}
 .tools input[type=text]{width:100%}
-.urlgrid{display:grid;gap:8px}
 
 /* Fallbacks first: color-mix() needs Safari 16.2+. Older iPhones get flat tints
    instead of transparent gaps; supporting browsers override on the next line. */
@@ -388,68 +387,17 @@ details.tools[open] summary::before{content:"– ";}
 
   <!-- ============ TOOLS ============ -->
   <details class="tools">
-    <summary>Settings, backup &amp; install</summary>
+    <summary>Install &amp; saved bills</summary>
 
     <div class="grp">
-      <h3>Currency</h3>
-      <div class="row-btns">
-        <input type="text" id="curIn" maxlength="3" value="$" style="width:5ch;text-align:center">
-        <button class="btn sm ghost cur" data-c="$">$</button>
-        <button class="btn sm ghost cur" data-c="€">€</button>
-        <button class="btn sm ghost cur" data-c="£">£</button>
-        <button class="btn sm ghost cur" data-c="₹">₹</button>
-        <button class="btn sm ghost cur" data-c="¥">¥</button>
-      </div>
-    </div>
-
-    <div class="grp">
-      <h3>This bill</h3>
-      <div class="row-btns">
-        <button class="btn sm" id="saveJson">Save a copy</button>
-        <button class="btn sm" id="loadJson">Open a saved bill</button>
-        <button class="btn sm ghost" id="newBill">Start a new bill</button>
-        <input type="file" id="jsonFile" accept="application/json,.json" class="vh">
-      </div>
-      <p>Everything you type stays in this browser. Nothing is uploaded, ever — the app has no server to talk to.</p>
-    </div>
-
-    <div class="grp">
-      <h3>Install</h3>
       <div class="row-btns">
         <button class="btn sm primary" id="installBtn" disabled>Install app</button>
-        <button class="btn sm" id="dlSw">Download offline files</button>
+        <button class="btn sm" id="saveJson">Save a copy</button>
+        <button class="btn sm" id="loadJson">Open a saved bill</button>
+        <input type="file" id="jsonFile" accept="application/json,.json" class="vh">
       </div>
       <p id="installHint">On iPhone: Share → Add to Home Screen. On Android/desktop Chrome: use Install, or the icon in the address bar.</p>
-      <p><b>For full offline use</b> when hosting: put <code>sw.js</code> and <code>manifest.webmanifest</code> next to this file. The service worker caches the app and the text-recognition engine after the first run.</p>
-    </div>
-
-    <div class="grp">
-      <h3>Running it offline</h3>
-      <p>Opening the file straight from disk (<code>file://</code>) gives the page no origin, and browsers
-      refuse to start background workers there — which is what reads the receipt. Everything else works.
-      To get text recognition, serve the folder as static files from your own machine:
-      <code>python3 -m http.server 8080</code>, then open <code>localhost:8080</code>. That's a file server,
-      not a backend — nothing is sent anywhere. Installing it as an app has the same effect.</p>
-      <div class="row-btns">
-        <button class="btn sm ghost" id="diagBtn">Check what's available</button>
-        <button class="btn sm ghost" id="flushBtn">Force update</button>
-      </div>
-      <div id="diagOut"></div>
-    </div>
-
-    <div class="grp">
-      <h3>Text recognition engine</h3>
-      <p>Reading happens on your device with Tesseract. The engine is fetched once from a public CDN, then cached. To run completely air-gapped, download the files yourself, host them alongside this page and point these at them.</p>
-      <div class="urlgrid">
-        <div><label class="field" for="uScript">tesseract.min.js</label><input type="text" id="uScript"></div>
-        <div><label class="field" for="uWorker">worker.min.js</label><input type="text" id="uWorker"></div>
-        <div><label class="field" for="uCore">core folder</label><input type="text" id="uCore"></div>
-        <div><label class="field" for="uLang">traineddata folder</label><input type="text" id="uLang"></div>
-      </div>
-      <div class="row-btns" style="margin-top:10px">
-        <button class="btn sm" id="saveUrls">Save paths</button>
-        <button class="btn sm ghost" id="resetUrls">Reset to defaults</button>
-      </div>
+      <p>Everything you type stays in this browser. Nothing is uploaded, ever — the app has no server to talk to.</p>
     </div>
   </details>
 
@@ -953,8 +901,6 @@ async function detectVendored(){
     if(r.ok){
       urls = Object.assign({}, LOCAL_URLS);
       vendored = true;
-      const uMap = { uScript:"script", uWorker:"worker", uCore:"core", uLang:"lang" };
-      Object.keys(uMap).forEach(id => { const el = $("#" + id); if(el) el.value = urls[uMap[id]]; });
     }
   }catch(e){}
 }
@@ -1275,7 +1221,7 @@ function showScanError(headline, detail){
     p.style.cssText = "margin-top:8px";
     p.innerHTML = "You opened this file directly from disk. Reading text needs a background worker, " +
       "which browsers block on <code>file://</code> pages. Your picture is fine — " +
-      "type the lines in below, or see <b>Settings → Running it offline</b>.";
+      "type the lines in below, or open the app from a web address instead.";
     d.appendChild(p);
   }
   const b = document.createElement("button");
@@ -1415,13 +1361,6 @@ function wire(){
     state.mode = r.value; recompute(); save();
   }));
 
-  $("#curIn").addEventListener("input", () => {
-    state.currency = $("#curIn").value || "$"; recompute(); save();
-  });
-  $$(".cur").forEach(b => b.addEventListener("click", () => {
-    state.currency = b.dataset.c; $("#curIn").value = b.dataset.c; recompute(); save();
-  }));
-
   $("#copyAll").addEventListener("click", () => copy(fullText()));
   $("#printBtn").addEventListener("click", () => window.print());
   $("#shareAll").addEventListener("click", async () => {
@@ -1450,81 +1389,6 @@ function wire(){
     };
     fr.readAsText(f);
   });
-  $("#newBill").addEventListener("click", () => {
-    if(!confirm("Start over? The current bill is cleared.")) return;
-    const keep = state.people.map(p => ({ id: p.id, name: p.name, color: p.color }));
-    state = { currency: state.currency, people: keep, items: [], tax:0, tip:0, fee:0, disc:0,
-              ocrTotal:null, ocrSub:null, mode: state.mode, created: Date.now() };
-    imgFile = null;
-    if(imgURL){ URL.revokeObjectURL(imgURL); imgURL = null; }
-    $("#previewImg").removeAttribute("src");
-    $("#preview").style.display = "none"; $("#scanNotice").innerHTML = "";
-    boot(); save();
-  });
-
-  // engine paths
-  const uMap = { uScript:"script", uWorker:"worker", uCore:"core", uLang:"lang" };
-  Object.keys(uMap).forEach(id => { $("#" + id).value = urls[uMap[id]]; });
-  $("#saveUrls").addEventListener("click", () => {
-    Object.keys(uMap).forEach(id => { urls[uMap[id]] = $("#" + id).value.trim() || DEFAULT_URLS[uMap[id]]; });
-    localStorage.setItem(LS_URLS, JSON.stringify(urls));
-    worker = null;
-    toast("Saved. Scan again to use them.");
-  });
-  $("#resetUrls").addEventListener("click", () => {
-    urls = Object.assign({}, DEFAULT_URLS);
-    Object.keys(uMap).forEach(id => { $("#" + id).value = urls[uMap[id]]; });
-    localStorage.removeItem(LS_URLS); worker = null; toast("Back to defaults");
-  });
-
-  $("#flushBtn").addEventListener("click", async () => {
-    try{
-      if(window.caches){
-        const ks = await caches.keys();
-        await Promise.all(ks.map(k => caches.delete(k)));
-      }
-      if(navigator.serviceWorker){
-        const regs = await navigator.serviceWorker.getRegistrations();
-        await Promise.all(regs.map(r => r.unregister()));
-      }
-      toast("Cleared. Reloading…");
-      setTimeout(() => location.reload(true), 700);
-    }catch(e){ toast("Couldn't clear: " + e.name); }
-  });
-
-  $("#diagBtn").addEventListener("click", async () => {
-    const out = $("#diagOut");
-    out.innerHTML = "";
-    const rows = [];
-    rows.push(["Build", BUILD]);
-    rows.push(["Opened from", location.protocol === "file:" ? "a file on disk" : location.protocol.replace(":","")]);
-    rows.push(["Reading files", typeof FileReader !== "undefined" ? "yes" : "no"]);
-    rows.push(["Image decoding", typeof createImageBitmap === "function" ? "createImageBitmap" : "fallback"]);
-    let workerOk = "no";
-    try{
-      const b = new Blob(["self.close()"], { type: "text/javascript" });
-      const w = new Worker(URL.createObjectURL(b));
-      w.terminate(); workerOk = "yes";
-    }catch(e){ workerOk = "blocked (" + e.name + ")"; }
-    rows.push(["Background workers", workerOk]);
-    rows.push(["WebAssembly", typeof WebAssembly !== "undefined" ? "yes" : "no"]);
-    rows.push(["Engine loaded", window.Tesseract ? "yes" : "not yet"]);
-    rows.push(["Network", navigator.onLine ? "online" : "offline"]);
-    rows.push(["Service worker", navigator.serviceWorker && navigator.serviceWorker.controller ? "active" : "none"]);
-    rows.push(["Saves between visits", (() => { try{ localStorage.setItem("_t","1"); localStorage.removeItem("_t"); return "yes"; }catch(e){ return "no"; } })()]);
-    const d = document.createElement("div");
-    d.className = "notice" + (workerOk === "yes" ? " ok" : "");
-    d.style.fontSize = "12px";
-    d.innerHTML = rows.map(r => "<div>" + r[0] + " — <b>" + esc(r[1]) + "</b></div>").join("");
-    out.appendChild(d);
-  });
-
-  $("#dlSw").addEventListener("click", () => {
-    download("sw.js", SW_SOURCE, "text/javascript");
-    setTimeout(() => download("manifest.webmanifest", JSON.stringify(manifestObject(), null, 2), "application/manifest+json"), 400);
-    toast("Put both next to this HTML file");
-  });
-
   window.addEventListener("beforeunload", save);
 }
 
@@ -1572,90 +1436,6 @@ function manifestObject(){
     ]
   };
 }
-const SW_SOURCE = `/* Split the Tab — offline cache. Drop next to index.html. */
-const CACHE = 'splittab-v4';
-const SHELL = ['./', './index.html', './manifest.webmanifest'];
-
-self.addEventListener('install', e => {
-  self.skipWaiting();
-  e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL).catch(() => {})));
-});
-
-self.addEventListener('activate', e => {
-  e.waitUntil(caches.keys().then(ks => Promise.all(
-    ks.filter(k => k !== CACHE).map(k => caches.delete(k))
-  )).then(() => self.clients.claim()));
-});
-
-self.addEventListener('message', e => {
-  if (e.data === 'flush') {
-    caches.keys().then(ks => Promise.all(ks.map(k => caches.delete(k))));
-  }
-});
-
-self.addEventListener('fetch', e => {
-  const req = e.request;
-  const url = new URL(req.url);
-
-  // Photo shared in from another app. Stash it and bounce to the page;
-  // this is handled entirely in the worker, there is nowhere for it to be sent.
-  if (req.method === 'POST' && url.pathname.endsWith('/share')) {
-    e.respondWith((async () => {
-      try {
-        const form = await req.formData();
-        const file = form.get('photo') || form.get('image') || form.get('file');
-        if (file) {
-          const c = await caches.open('splittab-share');
-          await c.put('shared-photo', new Response(file, {
-            headers: {
-              'Content-Type': file.type || 'image/jpeg',
-              'X-Name': encodeURIComponent(file.name || 'shared.jpg')
-            }
-          }));
-        }
-      } catch (err) {}
-      return Response.redirect('./?shared=1', 303);
-    })());
-    return;
-  }
-
-  if (req.method !== 'GET') return;
-  const sameOrigin = url.origin === location.origin;
-
-  // The app itself: network first, so a newer copy is picked up straight away.
-  // Falling back to cache keeps it working with no connection.
-  if (sameOrigin) {
-    e.respondWith(
-      fetch(req).then(res => {
-        if (res && res.ok) {
-          const copy = res.clone();
-          caches.open(CACHE).then(c => c.put(req, copy));
-        }
-        return res;
-      }).catch(() => caches.match(req).then(hit => {
-        if (hit) return hit;
-        // Only a page navigation should ever be answered with the page.
-        if (req.mode === 'navigate') return caches.match('./index.html');
-        return new Response('', { status: 504, statusText: 'Offline' });
-      }))
-    );
-    return;
-  }
-
-  // The recognition engine: cache first, it never changes.
-  if (/jsdelivr|unpkg|cdnjs|tessdata/.test(url.hostname)) {
-    e.respondWith(
-      caches.match(req).then(hit => hit || fetch(req).then(res => {
-        if (res && (res.ok || res.type === 'opaque')) {
-          const copy = res.clone();
-          caches.open(CACHE).then(c => c.put(req, copy));
-        }
-        return res;
-      }))
-    );
-  }
-});`;
-
 async function initPWA(){
   // A real manifest file next to the page produces a proper installed app on Android.
   // The generated data: manifest is the fallback for single-file use.
@@ -1707,7 +1487,6 @@ async function initPWA(){
 
 /* ---------- boot ---------- */
 function boot(){
-  $("#curIn").value = state.currency;
   $("#taxIn").value = plain(state.tax);
   $("#tipIn").value = plain(state.tip);
   $("#feeIn").value = plain(state.fee);
@@ -1724,8 +1503,7 @@ function fileProtocolWarning(){
   d.innerHTML = "<b>Opened straight from disk.</b> Photos, editing and splitting all work. " +
     "Reading the receipt automatically won't — browsers block background workers on " +
     "<code>file://</code> pages, and that's what runs the text recognition. " +
-    "Serve the folder over <code>localhost</code> or install it as an app to switch it on. " +
-    "<span style='color:var(--faded)'>Details under Settings → Running it offline.</span>";
+    "Serve the folder over <code>localhost</code> or install it as an app to switch it on.";
   $("#scanNotice").appendChild(d);
 }
 
