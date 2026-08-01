@@ -890,7 +890,7 @@ const LOCAL_URLS = {
 };
 
 /* If the engine has been vendored alongside the app, prefer it and never touch a CDN.
-   Anything the user has explicitly set in Settings wins over both. */
+   A urls value already in storage (from an older build's settings) wins over both. */
 let vendored = false;
 async function detectVendored(){
   if(!location.protocol.startsWith("http")) return;
@@ -922,7 +922,7 @@ async function ensureTesseract(){
     catch(e){ err = e; }
   }
   throw new Error("Couldn't load the recognition engine. You're offline, or the CDN is blocked. " +
-                  "You can still enter lines by hand, or point at local files under Settings.");
+                  "You can still enter lines by hand.");
 }
 
 function setProgress(p, label){
