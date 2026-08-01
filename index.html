@@ -1,0 +1,1755 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Split the Tab</title>
+<meta name="description" content="Scan a receipt, assign each line to whoever ate it, split tax and tip. Runs entirely on your device.">
+<meta name="theme-color" content="#E9E7E0">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Split the Tab">
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
+<link rel="icon" href="./icons/icon-192.png">
+<style>
+/* ---------- tokens ---------- */
+:root{
+  --paper:#E9E7E0;
+  --sheet:#F6F4EE;
+  --ink:#17181A;
+  --carbon:#3B34A0;
+  --stamp:#B22A20;
+  --faded:#8B897E;
+  --rule:#C9C6BB;
+  --disp:"Arial Narrow","Roboto Condensed","Helvetica Neue Condensed",
+         "Liberation Sans Narrow",system-ui,sans-serif;
+  --mono:ui-monospace,"SF Mono","DejaVu Sans Mono","Roboto Mono",Menlo,Consolas,monospace;
+  --gap:14px;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  background:var(--paper);
+  color:var(--ink);
+  font-family:var(--mono);
+  font-size:15px;
+  line-height:1.45;
+  -webkit-text-size-adjust:100%;
+  padding:0 10px calc(90px + env(safe-area-inset-bottom));
+}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--carbon);outline-offset:2px}
+
+/* ---------- paper sheet ---------- */
+.sheet{
+  max-width:600px;margin:0 auto;background:var(--sheet);
+  padding:0 clamp(14px,4vw,30px) 30px;
+  box-shadow:0 1px 0 rgba(0,0,0,.06),0 18px 40px -30px rgba(0,0,0,.5);
+  position:relative;
+}
+.tear{
+  max-width:600px;margin:0 auto;height:10px;
+  background:radial-gradient(circle at 6px 10px,transparent 6px,var(--sheet) 6.5px);
+  background-size:12px 10px;
+}
+.tear.bottom{background:radial-gradient(circle at 6px 0,transparent 6px,var(--sheet) 6.5px);background-size:12px 10px}
+
+/* ---------- masthead ---------- */
+.masthead{text-align:center;padding:22px 0 10px}
+.masthead h1{
+  font-family:var(--disp);font-size:clamp(38px,12vw,62px);font-weight:700;
+  letter-spacing:.06em;text-transform:uppercase;margin:0;line-height:.92;
+}
+.masthead .sub{
+  font-size:11px;letter-spacing:.22em;text-transform:uppercase;color:var(--faded);
+  margin-top:10px;
+}
+.masthead .meta{font-size:11px;color:var(--faded);margin-top:4px;letter-spacing:.08em}
+
+/* ---------- section rules ---------- */
+.sec{margin-top:26px}
+.sec > h2{
+  display:flex;align-items:center;gap:10px;margin:0 0 12px;
+  font-family:var(--disp);font-size:15px;font-weight:700;
+  letter-spacing:.24em;text-transform:uppercase;color:var(--ink);
+}
+.sec > h2::before,.sec > h2::after{content:"";flex:1;border-top:1px dashed var(--rule)}
+.sec > h2::before{max-width:18px}
+.hint{font-size:12px;color:var(--faded);margin:-6px 0 12px}
+
+/* ---------- generic controls ---------- */
+.btn{
+  background:transparent;border:1.5px solid var(--ink);border-radius:0;
+  padding:9px 14px;font-family:var(--disp);font-size:14px;font-weight:700;
+  letter-spacing:.14em;text-transform:uppercase;
+}
+.btn:hover{background:var(--ink);color:var(--sheet)}
+.btn.primary{background:var(--carbon);border-color:var(--carbon);color:#fff}
+.btn.primary:hover{background:#2b2582}
+.btn.ghost{border-color:var(--rule);color:var(--faded)}
+.btn.ghost:hover{background:var(--rule);color:var(--ink)}
+.btn.sm{padding:5px 9px;font-size:12px;letter-spacing:.1em}
+.btn[disabled]{opacity:.4;pointer-events:none}
+.row-btns{display:flex;flex-wrap:wrap;gap:8px}
+input[type=text],input[type=number],select{
+  background:transparent;border:0;border-bottom:1px solid var(--rule);
+  padding:4px 2px;min-width:0;border-radius:0;
+}
+input:focus{border-bottom-color:var(--carbon);outline:none}
+label.field{display:block;font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--faded)}
+
+/* ---------- people ---------- */
+#peopleList{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+.person{
+  display:flex;align-items:center;gap:7px;border:1.5px solid var(--pc,var(--ink));
+  padding:5px 6px 5px 9px;
+}
+.person .dot{width:9px;height:9px;background:var(--pc);border-radius:50%;flex:none}
+.person input{border:0;width:8ch;font-size:14px;padding:0}
+.person .x{background:none;border:0;color:var(--faded);padding:0 3px;font-size:15px;line-height:1}
+.person .x:hover{color:var(--stamp)}
+.addperson{display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap}
+.addperson input{flex:1;min-width:120px}
+
+/* ---------- scan ---------- */
+.drop{
+  border:1.5px dashed var(--rule);padding:22px 16px;text-align:center;
+  transition:background .15s,border-color .15s;
+}
+.drop.over{border-color:var(--carbon)}
+.drop p{margin:0 0 12px;font-size:13px;color:var(--faded)}
+.preview{display:none;margin-top:12px}
+.preview img{width:100%;display:block;border:1px solid var(--rule);filter:grayscale(1) contrast(1.05)}
+.progress{display:none;margin-top:14px}
+.progress .bar{height:10px;border:1px solid var(--ink);position:relative;overflow:hidden;background:var(--sheet)}
+.progress .bar span{
+  position:absolute;inset:0 100% 0 0;
+  background:repeating-linear-gradient(90deg,var(--ink) 0 2px,transparent 2px 4px);
+  transition:right .25s ease;
+}
+.progress .lbl{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--faded);margin-top:6px}
+.notice{border-left:3px solid var(--stamp);padding:8px 10px;font-size:12.5px;margin-top:12px}
+.notice.ok{border-color:var(--carbon)}
+.notice b{font-weight:700}
+
+/* ---------- items ---------- */
+.item{padding:9px 0;border-bottom:1px dotted var(--rule)}
+.item.unassigned{box-shadow:-6px 0 0 var(--stamp);margin-left:6px;padding-left:6px}
+.item-main{display:flex;align-items:baseline;gap:6px;flex-wrap:wrap}
+.item-main .qty{flex:0 0 auto;width:3.2ch;text-align:center;font-variant-numeric:tabular-nums}
+.item-main .nm{flex:1 1 40%;min-width:8ch}
+.item-main .dots{flex:1 1 14px;border-bottom:1px dotted var(--rule);transform:translateY(-4px);min-width:14px}
+.item-main .pr{flex:0 0 auto;width:8.5ch;text-align:right;font-variant-numeric:tabular-nums}
+.item-main .kill{flex:0 0 auto;background:none;border:0;color:var(--rule);padding:0 2px;font-size:14px}
+.item-main .kill:hover{color:var(--stamp)}
+.assign{display:flex;flex-wrap:wrap;gap:5px;margin-top:7px;padding-left:calc(3.2ch + 6px)}
+.chip{
+  border:1.5px solid var(--pc,var(--rule));background:transparent;color:var(--pc,var(--faded));
+  font-family:var(--disp);font-size:11px;font-weight:700;letter-spacing:.1em;
+  text-transform:uppercase;padding:3px 7px;
+}
+.chip[aria-pressed=true]{background:var(--pc);color:#fff}
+.chip.all{--pc:var(--ink)}
+.chip.all[aria-pressed=true]{background:var(--ink);color:var(--sheet)}
+.item-foot{display:flex;justify-content:space-between;gap:10px;padding-top:12px;flex-wrap:wrap}
+.empty{color:var(--faded);font-size:13px;text-align:center;padding:18px 0;border-bottom:1px dotted var(--rule)}
+
+/* ---------- charges ---------- */
+.line{display:flex;align-items:baseline;gap:6px;padding:6px 0}
+.line .lb{flex:0 1 auto;min-width:0;font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--faded)}
+.line .dots{flex:1 1 14px;min-width:14px;border-bottom:1px dotted var(--rule);transform:translateY(-4px)}
+.line .val{flex:0 0 auto;font-variant-numeric:tabular-nums;text-align:right}
+.line input.val{width:9ch}
+.line.grand{border-top:1.5px solid var(--ink);border-bottom:3px double var(--ink);margin-top:8px;padding:9px 0}
+.line.grand .lb{font-family:var(--disp);font-size:15px;letter-spacing:.2em;color:var(--ink);font-weight:700}
+.line.grand .val{font-family:var(--disp);font-size:24px;font-weight:700;letter-spacing:.02em}
+.tipbar{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:6px 0 2px;padding-left:2px}
+.modes{display:flex;gap:14px;flex-wrap:wrap;margin-top:12px;font-size:11px;
+  letter-spacing:.14em;text-transform:uppercase;color:var(--faded)}
+.modes label{display:inline-flex;gap:5px;align-items:center;cursor:pointer}
+
+/* ---------- slips (signature) ---------- */
+.slip{
+  --pc:var(--ink);
+  margin:16px 0;padding:14px 15px 15px;position:relative;
+  border:1px solid;
+  border-left:5px solid var(--pc);
+  animation:feed .4s ease both;
+}
+@keyframes feed{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:none}}
+.slip .who{
+  display:flex;justify-content:space-between;align-items:baseline;gap:8px 14px;flex-wrap:wrap;
+  border-bottom:1px dashed;padding-bottom:8px;
+}
+.slip .who b{
+  font-family:var(--disp);font-size:22px;font-weight:700;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--pc);
+  flex:1 1 auto;min-width:0;overflow-wrap:anywhere;
+}
+.slip .who .amt{
+  font-family:var(--disp);font-size:30px;font-weight:700;letter-spacing:.01em;
+  font-variant-numeric:tabular-nums;flex:0 0 auto;
+}
+.slip ul{list-style:none;margin:9px 0 0;padding:0;font-size:13px}
+.slip li{display:flex;gap:6px;align-items:baseline;padding:2px 0;color:#3a3b3d}
+.slip li .nmw{flex:0 1 auto;min-width:0;overflow-wrap:anywhere}
+.slip li .dots{flex:1 1 14px;min-width:14px;border-bottom:1px dotted;transform:translateY(-4px)}
+.slip li .v{flex:none;font-variant-numeric:tabular-nums}
+.slip li.sh .nmw::after{
+  content:" · shared";font-size:9px;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--pc);opacity:.75;
+}
+.slip .adds{
+  margin-top:9px;padding-top:7px;border-top:1px dashed;
+  display:flex;gap:10px 14px;flex-wrap:wrap;align-items:center;
+  font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--faded);
+}
+.slip .adds b{font-variant-numeric:tabular-nums;color:var(--ink);letter-spacing:0}
+.slip .copy{margin-left:auto;flex:none}
+.check{
+  text-align:center;font-size:11px;letter-spacing:.2em;text-transform:uppercase;
+  color:var(--faded);margin-top:18px;padding-top:12px;border-top:1px dashed var(--rule);
+}
+.check b{color:var(--ink)}
+
+/* ---------- tools ---------- */
+details.tools{margin-top:26px;border-top:1px dashed var(--rule);padding-top:12px}
+details.tools summary{
+  font-family:var(--disp);font-size:13px;letter-spacing:.2em;text-transform:uppercase;
+  color:var(--faded);cursor:pointer;list-style:none;
+}
+details.tools summary::-webkit-details-marker{display:none}
+details.tools summary::before{content:"+ ";}
+details.tools[open] summary::before{content:"– ";}
+.tools .grp{margin-top:14px}
+.tools .grp h3{font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:var(--faded);margin:0 0 8px;font-family:var(--mono)}
+.tools p{font-size:12px;color:var(--faded);line-height:1.55}
+.tools code{padding:1px 4px;font-size:11.5px}
+.tools input[type=text]{width:100%}
+.urlgrid{display:grid;gap:8px}
+
+/* Fallbacks first: color-mix() needs Safari 16.2+. Older iPhones get flat tints
+   instead of transparent gaps; supporting browsers override on the next line. */
+.person{background:#EFEDE6}
+.drop.over{background:#E4E2F2}
+.notice{background:#F6EBE9}
+.notice.ok{background:#E9E8F5}
+.item.unassigned{background:#F7ECEA}
+.slip{background:#F1EFE9;border-color:#CFCCC2}
+.slip .who{border-bottom-color:#CFCCC2}
+.slip li .dots{border-bottom-color:#D5D2C8}
+.slip .adds{border-top-color:#CFCCC2}
+.tools code{background:#E2E0D8}
+
+@supports (background:color-mix(in srgb,red 50%,blue)){
+  .person{background:color-mix(in srgb,var(--pc) 8%,transparent)}
+  .drop.over{background:color-mix(in srgb,var(--carbon) 6%,transparent)}
+  .notice{background:color-mix(in srgb,var(--stamp) 6%,transparent)}
+  .notice.ok{background:color-mix(in srgb,var(--carbon) 6%,transparent)}
+  .item.unassigned{background:color-mix(in srgb,var(--stamp) 5%,transparent)}
+  .slip{
+    background:color-mix(in srgb,var(--pc) 6%,var(--sheet));
+    border-color:color-mix(in srgb,var(--pc) 35%,transparent);
+  }
+  .slip .who{border-bottom-color:color-mix(in srgb,var(--pc) 40%,transparent)}
+  .slip li .dots{border-bottom-color:color-mix(in srgb,var(--pc) 35%,transparent)}
+  .slip li.sh .nmw::after{color:var(--pc)}
+  .slip .adds{border-top-color:color-mix(in srgb,var(--pc) 40%,transparent)}
+  .tools code{background:color-mix(in srgb,var(--ink) 7%,transparent)}
+}
+
+/* ---------- sticky tape ---------- */
+.tape{
+  position:fixed;left:0;right:0;bottom:0;z-index:20;
+  background:var(--ink);color:var(--sheet);
+  padding:10px 14px calc(10px + env(safe-area-inset-bottom));
+  display:flex;align-items:center;gap:12px;justify-content:space-between;
+}
+.tape > div:first-child{min-width:0;flex:0 1 auto}
+.tape .t-r{display:flex;align-items:center;gap:10px;flex:0 0 auto}
+.tape .t-l{font-size:10px;letter-spacing:.18em;text-transform:uppercase;opacity:.65;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tape .t-v{font-family:var(--disp);font-size:22px;font-weight:700;letter-spacing:.02em;font-variant-numeric:tabular-nums}
+.tape .btn{border-color:var(--sheet);color:var(--sheet);white-space:nowrap}
+.tape .btn:hover{background:var(--sheet);color:var(--ink)}
+.toast{
+  position:fixed;left:50%;bottom:92px;transform:translateX(-50%) translateY(14px);
+  background:var(--ink);color:var(--sheet);padding:9px 16px;font-size:12.5px;
+  letter-spacing:.06em;opacity:0;pointer-events:none;transition:.22s;z-index:30;max-width:88vw;text-align:center;
+}
+.toast.on{opacity:1;transform:translateX(-50%)}
+.vh{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+@media print{.tape,.drop,.tools,.item-foot,.progress{display:none!important}body{padding:0}.sheet{box-shadow:none}}
+</style>
+</head>
+<body>
+<div class="tear"></div>
+<main class="sheet">
+
+  <header class="masthead">
+    <h1>Split<br>the Tab</h1>
+    <div class="sub">Scan · Assign · Settle</div>
+    <div class="meta" id="stamp">—</div>
+  </header>
+
+  <!-- ============ PEOPLE ============ -->
+  <section class="sec" id="sec-people">
+    <h2>Who's in</h2>
+    <div id="peopleList"></div>
+    <div class="addperson">
+      <div style="flex:1">
+        <label class="field" for="newName">Add a name</label>
+        <input type="text" id="newName" autocomplete="off" placeholder="Priya" style="width:100%">
+      </div>
+      <button class="btn" id="addPerson">Add</button>
+    </div>
+  </section>
+
+  <!-- ============ SCAN ============ -->
+  <section class="sec" id="sec-scan">
+    <h2>The receipt</h2>
+    <div class="drop" id="drop">
+      <p>Photograph it, drop an image here, or paste from the clipboard.</p>
+      <div class="row-btns" style="justify-content:center">
+        <button class="btn primary" id="shoot">Take a photo</button>
+        <button class="btn" id="pick">Choose image</button>
+        <button class="btn" id="pickFiles">Browse files</button>
+        <button class="btn ghost" id="skip">Enter by hand</button>
+      </div>
+      <input type="file" id="fileCam" accept="image/*" capture="environment" class="vh">
+      <input type="file" id="fileLib" accept="image/*" class="vh">
+      <input type="file" id="fileAny" class="vh">
+    </div>
+    <div class="preview" id="preview">
+      <img id="previewImg" alt="Receipt you loaded">
+      <div class="row-btns" style="margin-top:10px">
+        <button class="btn sm" id="rotate">Rotate</button>
+        <button class="btn sm primary" id="rescan">Read it again</button>
+        <button class="btn sm ghost" id="clearImg">Remove</button>
+      </div>
+    </div>
+    <div class="progress" id="progress">
+      <div class="bar"><span id="barFill"></span></div>
+      <div class="lbl" id="progLbl">Warming up</div>
+    </div>
+    <div id="scanNotice"></div>
+  </section>
+
+  <!-- ============ ITEMS ============ -->
+  <section class="sec" id="sec-items">
+    <h2>Line items</h2>
+    <p class="hint">Tap initials to say who had it. <b>Everyone</b> shares it across the whole table, including people you add later.</p>
+    <div id="itemList"></div>
+    <div class="item-foot">
+      <button class="btn sm" id="addItem">+ Add a line</button>
+      <button class="btn sm ghost" id="clearItems">Clear all lines</button>
+    </div>
+  </section>
+
+  <!-- ============ CHARGES ============ -->
+  <section class="sec" id="sec-charges">
+    <h2>Tax &amp; tip</h2>
+    <div class="line"><span class="lb">Items subtotal</span><span class="dots"></span><span class="val" id="subVal">0.00</span></div>
+    <div id="reconcile"></div>
+    <div class="line"><span class="lb">Tax</span><span class="dots"></span><input class="val" type="text" inputmode="decimal" id="taxIn" value="0.00"></div>
+    <div class="line"><span class="lb">Tip</span><span class="dots"></span><input class="val" type="text" inputmode="decimal" id="tipIn" value="0.00"></div>
+    <div class="tipbar">
+      <span class="lb" style="font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--faded)">Quick tip</span>
+      <button class="btn sm ghost tipq" data-p="0">None</button>
+      <button class="btn sm ghost tipq" data-p="15">15%</button>
+      <button class="btn sm ghost tipq" data-p="18">18%</button>
+      <button class="btn sm ghost tipq" data-p="20">20%</button>
+      <button class="btn sm ghost tipq" data-p="25">25%</button>
+    </div>
+    <div class="line"><span class="lb">Service / fees</span><span class="dots"></span><input class="val" type="text" inputmode="decimal" id="feeIn" value="0.00"></div>
+    <div class="line"><span class="lb">Discount</span><span class="dots"></span><input class="val" type="text" inputmode="decimal" id="discIn" value="0.00"></div>
+    <div class="line grand"><span class="lb">Total</span><span class="dots"></span><span class="val" id="grandVal">0.00</span></div>
+    <div id="totalCheck"></div>
+    <div class="modes">
+      <span>Share tax &amp; tip</span>
+      <label><input type="radio" name="mode" value="prop" checked> By what each person ate</label>
+      <label><input type="radio" name="mode" value="even"> Evenly</label>
+    </div>
+  </section>
+
+  <!-- ============ SPLIT ============ -->
+  <section class="sec" id="sec-split">
+    <h2>The damage</h2>
+    <div id="slips"></div>
+    <div class="row-btns" style="margin-top:14px">
+      <button class="btn primary" id="shareAll">Share the split</button>
+      <button class="btn" id="copyAll">Copy as text</button>
+      <button class="btn ghost" id="printBtn">Print</button>
+    </div>
+  </section>
+
+  <!-- ============ TOOLS ============ -->
+  <details class="tools">
+    <summary>Settings, backup &amp; install</summary>
+
+    <div class="grp">
+      <h3>Currency</h3>
+      <div class="row-btns">
+        <input type="text" id="curIn" maxlength="3" value="$" style="width:5ch;text-align:center">
+        <button class="btn sm ghost cur" data-c="$">$</button>
+        <button class="btn sm ghost cur" data-c="€">€</button>
+        <button class="btn sm ghost cur" data-c="£">£</button>
+        <button class="btn sm ghost cur" data-c="₹">₹</button>
+        <button class="btn sm ghost cur" data-c="¥">¥</button>
+      </div>
+    </div>
+
+    <div class="grp">
+      <h3>This bill</h3>
+      <div class="row-btns">
+        <button class="btn sm" id="saveJson">Save a copy</button>
+        <button class="btn sm" id="loadJson">Open a saved bill</button>
+        <button class="btn sm ghost" id="newBill">Start a new bill</button>
+        <input type="file" id="jsonFile" accept="application/json,.json" class="vh">
+      </div>
+      <p>Everything you type stays in this browser. Nothing is uploaded, ever — the app has no server to talk to.</p>
+    </div>
+
+    <div class="grp">
+      <h3>Install</h3>
+      <div class="row-btns">
+        <button class="btn sm primary" id="installBtn" disabled>Install app</button>
+        <button class="btn sm" id="dlSw">Download offline files</button>
+      </div>
+      <p id="installHint">On iPhone: Share → Add to Home Screen. On Android/desktop Chrome: use Install, or the icon in the address bar.</p>
+      <p><b>For full offline use</b> when hosting: put <code>sw.js</code> and <code>manifest.webmanifest</code> next to this file. The service worker caches the app and the text-recognition engine after the first run.</p>
+    </div>
+
+    <div class="grp">
+      <h3>Running it offline</h3>
+      <p>Opening the file straight from disk (<code>file://</code>) gives the page no origin, and browsers
+      refuse to start background workers there — which is what reads the receipt. Everything else works.
+      To get text recognition, serve the folder as static files from your own machine:
+      <code>python3 -m http.server 8080</code>, then open <code>localhost:8080</code>. That's a file server,
+      not a backend — nothing is sent anywhere. Installing it as an app has the same effect.</p>
+      <div class="row-btns">
+        <button class="btn sm ghost" id="diagBtn">Check what's available</button>
+        <button class="btn sm ghost" id="flushBtn">Force update</button>
+      </div>
+      <div id="diagOut"></div>
+    </div>
+
+    <div class="grp">
+      <h3>Text recognition engine</h3>
+      <p>Reading happens on your device with Tesseract. The engine is fetched once from a public CDN, then cached. To run completely air-gapped, download the files yourself, host them alongside this page and point these at them.</p>
+      <div class="urlgrid">
+        <div><label class="field" for="uScript">tesseract.min.js</label><input type="text" id="uScript"></div>
+        <div><label class="field" for="uWorker">worker.min.js</label><input type="text" id="uWorker"></div>
+        <div><label class="field" for="uCore">core folder</label><input type="text" id="uCore"></div>
+        <div><label class="field" for="uLang">traineddata folder</label><input type="text" id="uLang"></div>
+      </div>
+      <div class="row-btns" style="margin-top:10px">
+        <button class="btn sm" id="saveUrls">Save paths</button>
+        <button class="btn sm ghost" id="resetUrls">Reset to defaults</button>
+      </div>
+    </div>
+  </details>
+
+</main>
+<div class="tear bottom"></div>
+
+<div class="tape">
+  <div>
+    <div class="t-l">Total</div>
+    <div class="t-v" id="tapeTotal">0.00</div>
+  </div>
+  <div class="t-r">
+    <div style="text-align:right;min-width:0">
+      <div class="t-l" id="tapeWho">no one yet</div>
+    </div>
+    <button class="btn sm" id="tapeJump">See the split</button>
+  </div>
+</div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+"use strict";
+/* ============================================================
+   Split the Tab — offline receipt splitter
+   No network calls except a one-time fetch of the OCR engine.
+   ============================================================ */
+
+const INKS = ["#3B34A0","#B22A20","#1F6F4A","#A8621B","#7A2E86","#14638C","#6B6B18","#A11E63"];
+const BUILD = "6";
+const LS_KEY = "splittab.v1";
+const LS_URLS = "splittab.urls.v1";
+
+const DEFAULT_URLS = {
+  script: "https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js",
+  worker: "https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/worker.min.js",
+  core:   "https://cdn.jsdelivr.net/npm/tesseract.js-core@5.1.1",
+  lang:   "https://tessdata.projectnaptha.com/4.0.0"
+};
+// tried in order if the primary script URL fails
+const SCRIPT_FALLBACKS = [
+  "https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/5.1.1/tesseract.min.js",
+  "https://unpkg.com/tesseract.js@5.1.1/dist/tesseract.min.js"
+];
+
+let state = {
+  currency: "$",
+  people: [],
+  items: [],
+  tax: 0, tip: 0, fee: 0, disc: 0,
+  ocrTotal: null, ocrSub: null,
+  mode: "prop",
+  created: Date.now()
+};
+let urls = Object.assign({}, DEFAULT_URLS);
+let imgFile = null;         // the picked photo, kept in memory only
+let imgURL = null;          // object URL for the preview
+let rotation = 0;
+let worker = null;
+let uid = 0;
+
+const $ = s => document.querySelector(s);
+const $$ = s => [...document.querySelectorAll(s)];
+const nid = () => (Date.now().toString(36) + (uid++).toString(36));
+
+/* ---------- money helpers (integer cents everywhere) ---------- */
+function money(cents){
+  const n = (Math.abs(cents)/100).toFixed(2);
+  return (cents < 0 ? "-" : "") + state.currency + n;
+}
+function plain(cents){ return (cents/100).toFixed(2); }
+
+function parseMoney(raw){
+  if(raw == null) return null;
+  let s = String(raw).trim();
+  const neg = /^\(.*\)$/.test(s) || /^-/.test(s) || /-$/.test(s);
+  s = s.replace(/[^\d.,]/g, "");
+  if(!s) return null;
+  const lastDot = s.lastIndexOf("."), lastCom = s.lastIndexOf(",");
+  const dec = Math.max(lastDot, lastCom);
+  let intPart, frac;
+  const tail = s.length - dec - 1;
+  if(dec >= 0 && tail > 0 && tail <= 2){
+    intPart = s.slice(0, dec).replace(/[.,]/g, "");
+    frac = s.slice(dec + 1).padEnd(2, "0").slice(0, 2);
+  } else {
+    intPart = s.replace(/[.,]/g, "");
+    frac = "00";
+  }
+  const cents = (parseInt(intPart || "0", 10) * 100) + parseInt(frac || "0", 10);
+  if(!isFinite(cents)) return null;
+  return neg ? -cents : cents;
+}
+
+/* Distribute `total` cents across weights, exact to the cent. */
+function allocate(total, weights){
+  const n = weights.length;
+  if(!n) return [];
+  let w = weights.slice();
+  let sum = w.reduce((a,b)=>a+b, 0);
+  if(sum <= 0){ w = w.map(()=>1); sum = n; }
+  const sign = total < 0 ? -1 : 1;
+  const t = Math.abs(total);
+  const raw = w.map(x => t * x / sum);
+  const out = raw.map(Math.floor);
+  let rem = t - out.reduce((a,b)=>a+b, 0);
+  const order = raw.map((v,i)=>[v - Math.floor(v), i]).sort((a,b)=> b[0]-a[0] || a[1]-b[1]);
+  for(let k = 0; k < rem; k++) out[order[k % n][1]]++;
+  return out.map(v => v * sign);
+}
+
+/* ---------- persistence ---------- */
+function save(){
+  try{ localStorage.setItem(LS_KEY, JSON.stringify(state)); }catch(e){}
+}
+function load(){
+  try{
+    const raw = localStorage.getItem(LS_KEY);
+    if(raw){ const s = JSON.parse(raw); if(s && Array.isArray(s.people)) state = Object.assign(state, s); }
+    const u = localStorage.getItem(LS_URLS);
+    if(u) urls = Object.assign({}, DEFAULT_URLS, JSON.parse(u));
+  }catch(e){}
+}
+
+/* ============================================================
+   PEOPLE
+   ============================================================ */
+function addPerson(name){
+  name = (name || "").trim();
+  if(!name) return;
+  if(state.people.length >= 20){ toast("That's a lot of people. 20 is the limit."); return; }
+  const color = INKS[state.people.length % INKS.length];
+  state.people.push({ id: nid(), name, color });
+  renderPeople(); renderItems(); recompute(); save();
+}
+function removePerson(id){
+  state.people = state.people.filter(p => p.id !== id);
+  state.items.forEach(it => { it.to = (it.to||[]).filter(x => x !== id); });
+  renderPeople(); renderItems(); recompute(); save();
+}
+function initials(name){
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if(!parts.length) return "?";
+  if(parts.length === 1) return parts[0].slice(0,2).toUpperCase();
+  return (parts[0][0] + parts[1][0]).toUpperCase();
+}
+function renderPeople(){
+  const box = $("#peopleList");
+  box.innerHTML = "";
+  if(!state.people.length){
+    box.innerHTML = '<div class="empty" style="border:0;width:100%">Nobody yet. Add everyone who is chipping in.</div>';
+  }
+  state.people.forEach(p => {
+    const el = document.createElement("div");
+    el.className = "person";
+    el.style.setProperty("--pc", p.color);
+    el.innerHTML = '<span class="dot"></span>';
+    const inp = document.createElement("input");
+    inp.type = "text"; inp.value = p.name; inp.size = Math.max(4, p.name.length);
+    inp.setAttribute("aria-label", "Name");
+    inp.addEventListener("input", () => {
+      p.name = inp.value; inp.size = Math.max(4, inp.value.length);
+      renderItems(); recompute(); save();
+    });
+    const x = document.createElement("button");
+    x.className = "x"; x.type = "button"; x.textContent = "✕";
+    x.setAttribute("aria-label", "Remove " + p.name);
+    x.addEventListener("click", () => removePerson(p.id));
+    el.append(inp, x);
+    box.appendChild(el);
+  });
+}
+
+/* ============================================================
+   ITEMS
+   ============================================================ */
+function newItem(over){
+  return Object.assign({ id: nid(), name: "", qty: 1, price: 0, to: [], shared: false }, over || {});
+}
+function assigneesOf(it){
+  if(it.shared) return state.people.map(p => p.id);
+  const valid = (it.to||[]).filter(id => state.people.some(p => p.id === id));
+  return valid;
+}
+function isUnassigned(it){ return assigneesOf(it).length === 0; }
+
+function renderItems(){
+  const box = $("#itemList");
+  box.innerHTML = "";
+  if(!state.items.length){
+    box.innerHTML = '<div class="empty">No lines yet. Scan a receipt above, or add them by hand.</div>';
+    return;
+  }
+  state.items.forEach(it => box.appendChild(itemRow(it)));
+}
+
+function itemRow(it){
+  const row = document.createElement("div");
+  row.className = "item" + (isUnassigned(it) ? " unassigned" : "");
+  row.dataset.id = it.id;
+
+  const main = document.createElement("div");
+  main.className = "item-main";
+
+  const qty = document.createElement("input");
+  qty.type = "text"; qty.className = "qty"; qty.value = it.qty || 1;
+  qty.inputMode = "numeric"; qty.setAttribute("aria-label", "Quantity");
+  qty.addEventListener("input", () => { it.qty = parseInt(qty.value, 10) || 1; recompute(); save(); });
+
+  const nm = document.createElement("input");
+  nm.type = "text"; nm.className = "nm"; nm.value = it.name;
+  nm.placeholder = "What was it?"; nm.setAttribute("aria-label", "Item");
+  nm.addEventListener("input", () => { it.name = nm.value; save(); renderSlips(compute()); });
+
+  const dots = document.createElement("span"); dots.className = "dots";
+
+  const pr = document.createElement("input");
+  pr.type = "text"; pr.className = "pr"; pr.inputMode = "decimal";
+  pr.value = plain(it.price); pr.setAttribute("aria-label", "Price");
+  pr.addEventListener("input", () => { it.price = parseMoney(pr.value) || 0; recompute(); save(); });
+  pr.addEventListener("blur", () => { pr.value = plain(it.price); });
+
+  const kill = document.createElement("button");
+  kill.className = "kill"; kill.type = "button"; kill.textContent = "✕";
+  kill.setAttribute("aria-label", "Delete line");
+  kill.addEventListener("click", () => {
+    state.items = state.items.filter(x => x.id !== it.id);
+    renderItems(); recompute(); save();
+  });
+
+  main.append(qty, nm, dots, pr, kill);
+  row.appendChild(main);
+
+  const as = document.createElement("div");
+  as.className = "assign";
+  const active = assigneesOf(it);
+
+  state.people.forEach(p => {
+    const c = document.createElement("button");
+    c.type = "button"; c.className = "chip"; c.style.setProperty("--pc", p.color);
+    c.textContent = initials(p.name);
+    c.title = p.name;
+    c.setAttribute("aria-pressed", String(!it.shared && active.includes(p.id)));
+    c.addEventListener("click", () => {
+      if(it.shared){ it.shared = false; it.to = state.people.map(x => x.id); }
+      const i = it.to.indexOf(p.id);
+      if(i >= 0) it.to.splice(i, 1); else it.to.push(p.id);
+      refreshRow(it); recompute(); save();
+    });
+    as.appendChild(c);
+  });
+
+  if(state.people.length){
+    const all = document.createElement("button");
+    all.type = "button"; all.className = "chip all";
+    all.textContent = "Everyone";
+    all.setAttribute("aria-pressed", String(!!it.shared));
+    all.addEventListener("click", () => {
+      it.shared = !it.shared;
+      if(it.shared) it.to = [];
+      refreshRow(it); recompute(); save();
+    });
+    as.appendChild(all);
+  } else {
+    const hint = document.createElement("span");
+    hint.style.cssText = "font-size:12px;color:var(--faded)";
+    hint.textContent = "Add people to start assigning.";
+    as.appendChild(hint);
+  }
+  row.appendChild(as);
+  return row;
+}
+
+function refreshRow(it){
+  const old = document.querySelector('.item[data-id="' + it.id + '"]');
+  if(old) old.replaceWith(itemRow(it));
+}
+
+/* ============================================================
+   MATH
+   ============================================================ */
+function itemsSubtotal(){ return state.items.reduce((a,b)=> a + (b.price||0), 0); }
+
+function compute(){
+  const people = state.people;
+  const sub = itemsSubtotal();
+  const grand = sub + state.tax + state.tip + state.fee - state.disc;
+
+  const base = people.map(()=>0);
+  const detail = people.map(()=>[]);
+  const idx = {}; people.forEach((p,i)=> idx[p.id] = i);
+
+  state.items.forEach(it => {
+    let who = assigneesOf(it);
+    let orphan = false;
+    if(!who.length){ who = people.map(p => p.id); orphan = true; }   // nobody claimed it → whole table
+    if(!who.length) return;
+    const parts = allocate(it.price || 0, who.map(()=>1));
+    who.forEach((pid, k) => {
+      const i = idx[pid]; if(i == null) return;
+      base[i] += parts[k];
+      detail[i].push({
+        name: it.name || "Untitled line",
+        qty: it.qty || 1,
+        share: parts[k],
+        full: it.price || 0,
+        split: who.length > 1,
+        orphan
+      });
+    });
+  });
+
+  const weights = state.mode === "even" ? people.map(()=>1) : base.slice();
+  const taxShare = allocate(state.tax, weights);
+  const tipShare = allocate(state.tip, weights);
+  const feeShare = allocate(state.fee, weights);
+  const discShare = allocate(state.disc, weights);
+
+  const totals = people.map((p,i)=> base[i] + taxShare[i] + tipShare[i] + feeShare[i] - discShare[i]);
+
+  return { people, sub, grand, base, detail, taxShare, tipShare, feeShare, discShare, totals,
+           unassigned: state.items.filter(isUnassigned).length };
+}
+
+function recompute(){
+  const r = compute();
+  $("#subVal").textContent = money(r.sub);
+  $("#grandVal").textContent = money(r.grand);
+  $("#tapeTotal").textContent = money(r.grand);
+  $("#tapeWho").textContent = state.people.length
+    ? state.people.length + (state.people.length === 1 ? " person" : " people")
+    : "no one yet";
+  renderSlips(r);
+  renderReconcile(r);
+  markUnassigned();
+}
+
+function markUnassigned(){
+  state.items.forEach(it => {
+    const el = document.querySelector('.item[data-id="' + it.id + '"]');
+    if(el) el.classList.toggle("unassigned", isUnassigned(it));
+  });
+}
+
+function renderReconcile(r){
+  const box = $("#reconcile");
+  box.innerHTML = "";
+  const bits = [];
+
+  if(state.ocrSub != null && Math.abs(state.ocrSub - r.sub) > 2 && state.items.length){
+    const d = document.createElement("div");
+    d.className = "notice";
+    d.innerHTML = "The receipt says the subtotal is <b>" + money(state.ocrSub) +
+      "</b>, but your lines add up to <b>" + money(r.sub) + "</b>. A line was probably missed or misread. ";
+    const b = document.createElement("button");
+    b.className = "btn sm"; b.style.marginTop = "8px";
+    b.textContent = "Add the difference as a line";
+    b.addEventListener("click", () => {
+      state.items.push(newItem({ name: "Unaccounted", price: state.ocrSub - r.sub, shared: true }));
+      renderItems(); recompute(); save();
+    });
+    d.appendChild(b);
+    bits.push(d);
+  }
+
+  if(r.unassigned){
+    const d = document.createElement("div");
+    d.className = "notice";
+    d.innerHTML = "<b>" + r.unassigned + (r.unassigned === 1 ? " line has" : " lines have") +
+      " nobody on them.</b> They're being split across the whole table until you say otherwise.";
+    bits.push(d);
+  }
+  bits.forEach(b => box.appendChild(b));
+
+  const tc = $("#totalCheck");
+  tc.innerHTML = "";
+  if(state.ocrTotal != null){
+    const diff = r.grand - state.ocrTotal;
+    const d = document.createElement("div");
+    if(Math.abs(diff) <= 2){
+      d.className = "notice ok";
+      d.innerHTML = "Matches the printed total of <b>" + money(state.ocrTotal) + "</b>.";
+    } else {
+      d.className = "notice";
+      d.innerHTML = "The receipt's printed total is <b>" + money(state.ocrTotal) + "</b> — " +
+        money(Math.abs(diff)) + (diff > 0 ? " more" : " less") + " than this. ";
+      const b = document.createElement("button");
+      b.className = "btn sm"; b.style.marginTop = "8px";
+      b.textContent = "Put the difference in the tip";
+      b.addEventListener("click", () => {
+        state.tip = Math.max(0, state.tip - diff);
+        $("#tipIn").value = plain(state.tip);
+        recompute(); save();
+      });
+      d.appendChild(b);
+    }
+    tc.appendChild(d);
+  }
+}
+
+/* ============================================================
+   SLIPS
+   ============================================================ */
+function renderSlips(r){
+  const box = $("#slips");
+  box.innerHTML = "";
+  if(!state.people.length){
+    box.innerHTML = '<div class="empty" style="border:0">Add people and assign a few lines — the slips print here.</div>';
+    return;
+  }
+  r.people.forEach((p,i) => {
+    const slip = document.createElement("div");
+    slip.className = "slip";
+    slip.style.setProperty("--pc", p.color);
+
+    const who = document.createElement("div");
+    who.className = "who";
+    who.innerHTML = "<b>" + esc(p.name) + "</b><span class='amt'>" + money(r.totals[i]) + "</span>";
+    slip.appendChild(who);
+
+    const ul = document.createElement("ul");
+    if(!r.detail[i].length){
+      const li = document.createElement("li");
+      li.innerHTML = "<span style='color:var(--faded)'>Nothing assigned yet</span>";
+      ul.appendChild(li);
+    }
+    r.detail[i].forEach(d => {
+      const li = document.createElement("li");
+      if(d.split) li.className = "sh";
+      const q = d.qty > 1 ? d.qty + "× " : "";
+      li.innerHTML = "<span class='nmw'>" + esc(q + d.name) + "</span><span class='dots'></span><span class='v'>" +
+                     money(d.share) + "</span>";
+      ul.appendChild(li);
+    });
+    slip.appendChild(ul);
+
+    const adds = document.createElement("div");
+    adds.className = "adds";
+    adds.innerHTML =
+      "<span>Food <b>" + money(r.base[i]) + "</b></span>" +
+      "<span>Tax <b>" + money(r.taxShare[i]) + "</b></span>" +
+      "<span>Tip <b>" + money(r.tipShare[i]) + "</b></span>" +
+      (state.fee ? "<span>Fees <b>" + money(r.feeShare[i]) + "</b></span>" : "") +
+      (state.disc ? "<span>Discount <b>-" + money(r.discShare[i]) + "</b></span>" : "");
+
+    const cp = document.createElement("button");
+    cp.className = "btn sm ghost copy"; cp.textContent = "Copy";
+    cp.setAttribute("aria-label", "Copy " + p.name + "'s share");
+    cp.addEventListener("click", () => copy(slipText(r, i)));
+    adds.appendChild(cp);
+
+    slip.appendChild(adds);
+    box.appendChild(slip);
+  });
+
+  const sum = r.totals.reduce((a,b)=>a+b, 0);
+  const chk = document.createElement("div");
+  chk.className = "check";
+  chk.innerHTML = "Slips add up to <b>" + money(sum) + "</b> · bill total <b>" + money(r.grand) + "</b>";
+  box.appendChild(chk);
+}
+
+function esc(s){ return String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+
+function slipText(r, i){
+  const p = r.people[i];
+  const lines = [p.name.toUpperCase() + " — " + money(r.totals[i])];
+  r.detail[i].forEach(d => {
+    lines.push("  " + (d.qty > 1 ? d.qty + "x " : "") + (d.name || "line") +
+               (d.split ? " (shared)" : "") + "  " + money(d.share));
+  });
+  lines.push("  tax " + money(r.taxShare[i]) + " · tip " + money(r.tipShare[i]));
+  return lines.join("\n");
+}
+function fullText(){
+  const r = compute();
+  const out = ["SPLIT THE TAB", new Date(state.created).toLocaleDateString(), ""];
+  r.people.forEach((p,i) => { out.push(slipText(r, i), ""); });
+  out.push("Subtotal " + money(r.sub) + " · Tax " + money(state.tax) + " · Tip " + money(state.tip));
+  out.push("TOTAL " + money(r.grand));
+  return out.join("\n");
+}
+
+/* ============================================================
+   OCR
+   ============================================================ */
+const LOCAL_URLS = {
+  script: "./vendor/tesseract.min.js",
+  worker: "./vendor/worker.min.js",
+  core:   "./vendor/core",
+  lang:   "./vendor/lang"
+};
+
+/* If the engine has been vendored alongside the app, prefer it and never touch a CDN.
+   Anything the user has explicitly set in Settings wins over both. */
+let vendored = false;
+async function detectVendored(){
+  if(!location.protocol.startsWith("http")) return;
+  if(localStorage.getItem(LS_URLS)) return;      // user chose their own paths
+  try{
+    const r = await fetch(LOCAL_URLS.script, { method: "HEAD", cache: "no-store" });
+    if(r.ok){
+      urls = Object.assign({}, LOCAL_URLS);
+      vendored = true;
+      const uMap = { uScript:"script", uWorker:"worker", uCore:"core", uLang:"lang" };
+      Object.keys(uMap).forEach(id => { const el = $("#" + id); if(el) el.value = urls[uMap[id]]; });
+    }
+  }catch(e){}
+}
+
+function loadScript(src){
+  return new Promise((res, rej) => {
+    const s = document.createElement("script");
+    s.src = src; s.async = true;
+    s.onload = res;
+    s.onerror = () => rej(new Error("blocked: " + src));
+    document.head.appendChild(s);
+  });
+}
+async function ensureTesseract(){
+  if(window.Tesseract) return;
+  const list = [urls.script, ...SCRIPT_FALLBACKS.filter(u => u !== urls.script)];
+  let err;
+  for(const u of list){
+    try{ await loadScript(u); if(window.Tesseract) return; }
+    catch(e){ err = e; }
+  }
+  throw new Error("Couldn't load the recognition engine. You're offline, or the CDN is blocked. " +
+                  "You can still enter lines by hand, or point at local files under Settings.");
+}
+
+function setProgress(p, label){
+  $("#progress").style.display = "block";
+  $("#barFill").style.right = (100 - Math.round(p * 100)) + "%";
+  $("#progLbl").textContent = label;
+}
+function hideProgress(){ $("#progress").style.display = "none"; }
+
+async function makeWorker(){
+  const opts = {
+    workerPath: urls.worker,
+    corePath: urls.core,
+    langPath: urls.lang,
+    logger: m => {
+      if(m.status === "recognizing text") setProgress(0.25 + m.progress * 0.72, "Reading the receipt");
+      else if(m.status) setProgress(0.2, m.status.replace(/^\w/, c => c.toUpperCase()));
+    }
+  };
+  try{
+    return await Tesseract.createWorker("eng", 1, opts);
+  }catch(e){
+    // Some origins refuse one of the two ways the worker script can be loaded.
+    // Flip the strategy and try once more before giving up.
+    return await Tesseract.createWorker("eng", 1, Object.assign({}, opts, { workerBlobURL: false }));
+  }
+}
+
+async function runOCR(){
+  if(!imgFile) return;
+  let canvas;
+  try{
+    setProgress(0.02, "Opening the photo");
+    canvas = await prepImage(imgFile, rotation);
+  }catch(e){
+    hideProgress();
+    showScanError("That image wouldn't open", (e.name ? e.name + ": " : "") + (e.message || e));
+    return;
+  }
+  try{
+    setProgress(0.03, "Loading the engine");
+    await ensureTesseract();
+    setProgress(0.15, "Starting up");
+    if(!worker){
+      worker = await makeWorker();
+      await worker.setParameters({
+        tessedit_pageseg_mode: "4",
+        preserve_interword_spaces: "1"
+      });
+    }
+    const { data } = await worker.recognize(canvas);
+    setProgress(1, "Sorting it out");
+    applyParse(parseReceipt(data.text || ""));
+    hideProgress();
+  }catch(e){
+    hideProgress();
+    worker = null;
+    const msg = (e && (e.message || e.name)) ? ((e.name ? e.name + ": " : "") + (e.message || "")) : String(e);
+    showScanError("Couldn't read the receipt", msg);
+  }
+}
+
+/* Decode, honour EXIF rotation, downscale, grayscale + contrast stretch for cleaner OCR.
+   Phone cameras produce 12 MP+ images; a canvas that size is a memory hazard on Android,
+   so everything is capped before any pixel work happens. */
+async function decode(blob){
+  if(typeof createImageBitmap === "function"){
+    try{
+      return await createImageBitmap(blob, { imageOrientation: "from-image" });
+    }catch(e){
+      try{ return await createImageBitmap(blob); }catch(e2){}
+    }
+  }
+  return await new Promise((res, rej) => {
+    const url = URL.createObjectURL(blob);
+    const img = new Image();
+    img.onload = () => { URL.revokeObjectURL(url); res(img); };
+    img.onerror = () => { URL.revokeObjectURL(url); rej(new Error("the image format isn't supported")); };
+    img.src = url;
+  });
+}
+
+async function prepImage(blob, deg){
+  const src = await decode(blob);
+  const sw = src.width, sh = src.height;
+  if(!sw || !sh) throw new Error("the image came back empty");
+
+  const swap = (deg % 180) !== 0;
+  const MAX_EDGE = 1600;
+  const MAX_PIXELS = 2.6e6;
+  let scale = Math.min(1, MAX_EDGE / Math.max(sw, sh));
+  if(sw * sh * scale * scale > MAX_PIXELS) scale = Math.sqrt(MAX_PIXELS / (sw * sh));
+  const w = Math.max(1, Math.round(sw * scale));
+  const h = Math.max(1, Math.round(sh * scale));
+
+  const c = document.createElement("canvas");
+  c.width = swap ? h : w;
+  c.height = swap ? w : h;
+  const x = c.getContext("2d", { willReadFrequently: true });
+  if(!x) throw new Error("the browser wouldn't give this page a canvas");
+
+  x.save();
+  x.translate(c.width / 2, c.height / 2);
+  x.rotate(deg * Math.PI / 180);
+  x.drawImage(src, -w / 2, -h / 2, w, h);
+  x.restore();
+  if(src.close) src.close();
+
+  let d;
+  try{
+    d = x.getImageData(0, 0, c.width, c.height);
+  }catch(e){
+    return c;   // tainted or oversized: hand the plain canvas to the engine anyway
+  }
+  const px = d.data;
+  let min = 255, max = 0;
+  for(let i = 0; i < px.length; i += 4){
+    const g = (px[i] * 0.299 + px[i+1] * 0.587 + px[i+2] * 0.114) | 0;
+    px[i] = px[i+1] = px[i+2] = g;
+    if(g < min) min = g;
+    if(g > max) max = g;
+  }
+  const range = Math.max(1, max - min);
+  for(let i = 0; i < px.length; i += 4){
+    let v = ((px[i] - min) * 255 / range);
+    v = v < 110 ? v * 0.65 : Math.min(255, v * 1.18);
+    px[i] = px[i+1] = px[i+2] = v;
+  }
+  x.putImageData(d, 0, 0);
+  return c;
+}
+
+/* ---------- receipt text → structured lines ---------- */
+const RX = {
+  amount: /(-?\(?\s*[$€£¥₹]?\s*\d{1,5}(?:[.,\s]\d{3})*[.,]\d{2}\s*\)?-?)\s*[A-Za-z*#]{0,3}\s*$/,
+  qtyLead: /^\s*(\d{1,2})\s*(?:[xX×@*]|\bea\b)?\s+(?=\S)/,
+  qtyTail: /\s*[xX×]\s*(\d{1,2})\s*$/,
+  subtotal: /\bsub[\s\-_]?tot|\bsubtl\b|\bsub\b(?=\s*[:.])/i,
+  tax: /\b(tax|vat|gst|hst|pst|qst|iva|mwst|tva)\b/i,
+  tip: /\b(tip|gratuity|gratuit|service (charge|chg|fee))\b/i,
+  fee: /\b(service|delivery|booking|admin|surcharge|convenience|bag) (charge|fee)\b|\bfee\b/i,
+  disc: /\b(discount|coupon|promo|comp|off|savings|voucher)\b/i,
+  total: /\b(total|amount due|balance due|to pay|grand total|betrag)\b/i,
+  noise: /\b(cash|change|visa|master ?card|amex|debit|credit|card|tender|tendered|auth|approv|acct|account|ref|trace|batch|terminal|invoice|order|table|server|guests?|check ?#|receipt|thank|www\.|http|@|tel|phone|survey|points|balance:)\b/i,
+  datetime: /\b\d{1,2}[\/\-.]\d{1,2}[\/\-.]\d{2,4}\b|\b\d{1,2}:\d{2}\b/,
+  letters: /[A-Za-z]{2,}/
+};
+
+function fixDigits(s){
+  return s.replace(/[OoQ]/g, "0").replace(/[lI|]/g, "1").replace(/[Ss]/g, "5").replace(/B/g, "8");
+}
+
+function parseReceipt(text){
+  const out = { items: [], tax: null, tip: null, fee: null, disc: null, total: null, sub: null, raw: text };
+  const lines = text.split(/\r?\n/).map(l => l.replace(/\s+/g, " ").trim()).filter(l => l.length > 2);
+
+  for(const line of lines){
+    const m = line.match(RX.amount);
+    if(!m) continue;
+
+    let amtStr = m[1];
+    const digits = amtStr.replace(/[^\d.,]/g, "");
+    if(!/[.,]\d{2}$/.test(digits)) continue;
+    let cents = parseMoney(fixDigits(amtStr));
+    if(cents == null) continue;
+
+    let label = line.slice(0, m.index).trim().replace(/[.·•_\-–—:]{2,}\s*$/, "").trim();
+    const lower = (label + " " + line).toLowerCase();
+
+    // classify summary rows first
+    if(RX.subtotal.test(lower)){ out.sub = cents; continue; }
+    if(RX.tip.test(lower)){ out.tip = cents; continue; }
+    if(RX.tax.test(lower)){ out.tax = (out.tax || 0) + cents; continue; }
+    if(RX.disc.test(lower)){ out.disc = (out.disc || 0) + Math.abs(cents); continue; }
+    if(RX.total.test(lower)){ if(cents > (out.total || 0)) out.total = cents; continue; }
+    if(RX.fee.test(lower)){ out.fee = (out.fee || 0) + cents; continue; }
+
+    // reject junk
+    if(RX.noise.test(lower)) continue;
+    if(RX.datetime.test(label)) continue;
+    if(!RX.letters.test(label)) continue;
+    if(cents <= 0 || cents > 500000) continue;
+
+    // quantity
+    let qty = 1;
+    const qL = label.match(RX.qtyLead);
+    if(qL){ qty = parseInt(qL[1], 10) || 1; label = label.slice(qL[0].length).trim(); }
+    else {
+      const qT = label.match(RX.qtyTail);
+      if(qT){ qty = parseInt(qT[1], 10) || 1; label = label.replace(RX.qtyTail, "").trim(); }
+    }
+    // "2 @ 4.50" style: the trailing figure is already the line total
+    label = label.replace(/\b\d+\s*@\s*[\d.,]+\b/g, "").trim();
+    label = label.replace(/^[^A-Za-z0-9]+/, "").replace(/[^A-Za-z0-9%)\]]+$/, "").trim();
+    if(label.length < 2) continue;
+
+    out.items.push({ name: titleish(label), qty, price: cents });
+  }
+
+  // Tip not printed but derivable
+  if(out.total != null && out.sub != null && out.tip == null){
+    const rest = out.total - out.sub - (out.tax || 0) - (out.fee || 0) + (out.disc || 0);
+    if(rest > 0 && rest < out.sub) out.tip = rest;
+  }
+  return out;
+}
+
+function titleish(s){
+  const t = s.toLowerCase();
+  if(s === s.toUpperCase() && /[A-Z]/.test(s)){
+    return t.replace(/\b[a-z]/g, c => c.toUpperCase());
+  }
+  return s;
+}
+
+function applyParse(p){
+  const notice = $("#scanNotice");
+  notice.innerHTML = "";
+
+  if(p.items.length){
+    state.items = p.items.map(i => newItem({ name: i.name, qty: i.qty, price: i.price }));
+  }
+  state.tax = p.tax || 0;
+  state.tip = p.tip || 0;
+  state.fee = p.fee || 0;
+  state.disc = p.disc || 0;
+  state.ocrTotal = p.total;
+  state.ocrSub = p.sub;
+
+  $("#taxIn").value = plain(state.tax);
+  $("#tipIn").value = plain(state.tip);
+  $("#feeIn").value = plain(state.fee);
+  $("#discIn").value = plain(state.disc);
+
+  renderItems(); recompute(); save();
+
+  const d = document.createElement("div");
+  if(p.items.length){
+    d.className = "notice ok";
+    d.innerHTML = "Read <b>" + p.items.length + (p.items.length === 1 ? " line" : " lines") +
+      "</b>. Check the prices against the paper — OCR gets creative with faded print.";
+  } else {
+    d.className = "notice";
+    d.textContent = "Couldn't pick out any line items. Try a straighter, brighter photo with the whole receipt in frame — or add the lines by hand below.";
+  }
+  notice.appendChild(d);
+  $("#sec-items").scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+/* ============================================================
+   IMAGE INPUT
+   ============================================================ */
+function handleFile(file){
+  if(!file){ return; }
+  if(!/^image\//.test(file.type) && !/\.(jpe?g|png|webp|gif|bmp|heic|heif)$/i.test(file.name || "")){
+    toast("That needs to be an image."); return;
+  }
+  if(imgURL){ URL.revokeObjectURL(imgURL); imgURL = null; }
+  imgFile = file;
+  rotation = 0;
+  try{
+    imgURL = URL.createObjectURL(file);
+  }catch(e){
+    showScanError("The browser couldn't open that photo", e.name + ": " + e.message);
+    return;
+  }
+  const im = $("#previewImg");
+  im.style.transform = "";
+  im.onerror = () => {
+    showScanError("That photo wouldn't decode",
+      (file.type || "unknown type") + ", " + Math.round(file.size / 1024) + " KB. " +
+      "HEIC photos from some phones can't be decoded by Chrome — set the camera to save JPEG, " +
+      "or share the photo through Google Photos first, which converts it.");
+  };
+  im.src = imgURL;
+  $("#preview").style.display = "block";
+  $("#scanNotice").innerHTML = "";
+  runOCR();   // the picture is already on screen; OCR failing from here is recoverable
+}
+
+function showScanError(headline, detail){
+  const notice = $("#scanNotice");
+  notice.innerHTML = "";
+  const d = document.createElement("div");
+  d.className = "notice";
+  d.innerHTML = "<b>" + esc(headline) + "</b>";
+  if(detail){
+    const p = document.createElement("div");
+    p.style.cssText = "margin-top:6px;font-size:11.5px;color:var(--faded);word-break:break-word";
+    p.textContent = detail;
+    d.appendChild(p);
+  }
+  if(location.protocol === "file:"){
+    const p = document.createElement("div");
+    p.style.cssText = "margin-top:8px";
+    p.innerHTML = "You opened this file directly from disk. Reading text needs a background worker, " +
+      "which browsers block on <code>file://</code> pages. Your picture is fine — " +
+      "type the lines in below, or see <b>Settings → Running it offline</b>.";
+    d.appendChild(p);
+  }
+  const b = document.createElement("button");
+  b.className = "btn sm"; b.style.marginTop = "10px";
+  b.textContent = "Enter the lines by hand";
+  b.addEventListener("click", () => {
+    if(!state.items.length) state.items.push(newItem());
+    renderItems(); recompute(); save();
+    $("#sec-items").scrollIntoView({ behavior: "smooth" });
+  });
+  d.appendChild(b);
+  notice.appendChild(d);
+}
+
+/* ============================================================
+   MISC UI
+   ============================================================ */
+let toastTimer;
+function toast(msg){
+  const t = $("#toast");
+  t.textContent = msg; t.classList.add("on");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove("on"), 2400);
+}
+async function copy(text){
+  try{
+    await navigator.clipboard.writeText(text);
+    toast("Copied");
+  }catch(e){
+    const ta = document.createElement("textarea");
+    ta.value = text; document.body.appendChild(ta); ta.select();
+    try{ document.execCommand("copy"); toast("Copied"); }catch(_){ toast("Couldn't copy — select the text instead."); }
+    ta.remove();
+  }
+}
+function download(name, content, type){
+  const blob = new Blob([content], { type: type || "text/plain" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+}
+
+/* ============================================================
+   WIRING
+   ============================================================ */
+function wire(){
+  $("#stamp").textContent = new Date(state.created).toLocaleString([], {
+    year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit"
+  }) + " · on this device only · build " + BUILD;
+
+  $("#addPerson").addEventListener("click", () => {
+    addPerson($("#newName").value); $("#newName").value = ""; $("#newName").focus();
+  });
+  $("#newName").addEventListener("keydown", e => {
+    if(e.key === "Enter"){ addPerson($("#newName").value); $("#newName").value = ""; }
+  });
+
+  $("#shoot").addEventListener("click", () => $("#fileCam").click());
+  $("#pick").addEventListener("click", () => $("#fileLib").click());
+  $("#pickFiles").addEventListener("click", () => $("#fileAny").click());
+  // no accept filter: Android opens the document browser instead of the gallery picker
+  $("#fileAny").addEventListener("change", e => { handleFile(e.target.files[0]); e.target.value = ""; });
+
+  $("#skip").addEventListener("click", () => {
+    if(!state.items.length) state.items.push(newItem({ shared: false }));
+    renderItems(); recompute(); save();
+    $("#sec-items").scrollIntoView({ behavior: "smooth" });
+  });
+  // the value reset matters: without it, choosing the same file twice fires no event
+  $("#fileCam").addEventListener("change", e => { handleFile(e.target.files[0]); e.target.value = ""; });
+  $("#fileLib").addEventListener("change", e => { handleFile(e.target.files[0]); e.target.value = ""; });
+
+  const drop = $("#drop");
+  ["dragenter","dragover"].forEach(ev => drop.addEventListener(ev, e => {
+    e.preventDefault(); drop.classList.add("over");
+  }));
+  ["dragleave","drop"].forEach(ev => drop.addEventListener(ev, e => {
+    e.preventDefault(); drop.classList.remove("over");
+  }));
+  drop.addEventListener("drop", e => {
+    const f = e.dataTransfer.files && e.dataTransfer.files[0];
+    if(f) handleFile(f);
+  });
+  window.addEventListener("paste", e => {
+    const it = [...(e.clipboardData?.items || [])].find(i => i.type.startsWith("image/"));
+    if(it) handleFile(it.getAsFile());
+  });
+
+  $("#rotate").addEventListener("click", () => {
+    rotation = (rotation + 90) % 360;
+    $("#previewImg").style.transform = "rotate(" + rotation + "deg)";
+    $("#previewImg").style.transformOrigin = "center";
+  });
+  $("#rescan").addEventListener("click", runOCR);
+  $("#clearImg").addEventListener("click", () => {
+    if(imgURL){ URL.revokeObjectURL(imgURL); imgURL = null; }
+    imgFile = null;
+    $("#previewImg").removeAttribute("src");
+    $("#preview").style.display = "none";
+    $("#scanNotice").innerHTML = "";
+  });
+
+  $("#addItem").addEventListener("click", () => {
+    const it = newItem();
+    state.items.push(it);
+    renderItems(); recompute(); save();
+    const el = document.querySelector('.item[data-id="' + it.id + '"] .nm');
+    if(el) el.focus();
+  });
+  $("#clearItems").addEventListener("click", () => {
+    if(!state.items.length) return;
+    if(confirm("Delete every line on this bill?")){
+      state.items = []; state.ocrSub = state.ocrTotal = null;
+      renderItems(); recompute(); save();
+    }
+  });
+
+  const bindMoney = (sel, key) => {
+    const el = $(sel);
+    el.addEventListener("input", () => { state[key] = parseMoney(el.value) || 0; recompute(); save(); });
+    el.addEventListener("blur", () => { el.value = plain(state[key]); });
+  };
+  bindMoney("#taxIn", "tax");
+  bindMoney("#tipIn", "tip");
+  bindMoney("#feeIn", "fee");
+  bindMoney("#discIn", "disc");
+
+  $$(".tipq").forEach(b => b.addEventListener("click", () => {
+    const pct = parseInt(b.dataset.p, 10);
+    state.tip = Math.round(itemsSubtotal() * pct / 100);
+    $("#tipIn").value = plain(state.tip);
+    recompute(); save();
+  }));
+
+  $$('input[name=mode]').forEach(r => r.addEventListener("change", () => {
+    state.mode = r.value; recompute(); save();
+  }));
+
+  $("#curIn").addEventListener("input", () => {
+    state.currency = $("#curIn").value || "$"; recompute(); save();
+  });
+  $$(".cur").forEach(b => b.addEventListener("click", () => {
+    state.currency = b.dataset.c; $("#curIn").value = b.dataset.c; recompute(); save();
+  }));
+
+  $("#copyAll").addEventListener("click", () => copy(fullText()));
+  $("#printBtn").addEventListener("click", () => window.print());
+  $("#shareAll").addEventListener("click", async () => {
+    const text = fullText();
+    if(navigator.share){
+      try{ await navigator.share({ title: "Split the Tab", text }); return; }catch(e){ if(e.name === "AbortError") return; }
+    }
+    copy(text);
+  });
+  $("#tapeJump").addEventListener("click", () => $("#sec-split").scrollIntoView({ behavior: "smooth" }));
+
+  $("#saveJson").addEventListener("click", () => {
+    download("split-" + new Date().toISOString().slice(0,10) + ".json", JSON.stringify(state, null, 2), "application/json");
+  });
+  $("#loadJson").addEventListener("click", () => $("#jsonFile").click());
+  $("#jsonFile").addEventListener("change", e => {
+    const f = e.target.files[0]; if(!f) return;
+    const fr = new FileReader();
+    fr.onload = () => {
+      try{
+        const s = JSON.parse(fr.result);
+        if(!s || !Array.isArray(s.people)) throw 0;
+        state = Object.assign({ currency:"$", people:[], items:[], tax:0, tip:0, fee:0, disc:0, mode:"prop", created:Date.now() }, s);
+        boot(); toast("Bill opened");
+      }catch(_){ toast("That file isn't a saved bill."); }
+    };
+    fr.readAsText(f);
+  });
+  $("#newBill").addEventListener("click", () => {
+    if(!confirm("Start over? The current bill is cleared.")) return;
+    const keep = state.people.map(p => ({ id: p.id, name: p.name, color: p.color }));
+    state = { currency: state.currency, people: keep, items: [], tax:0, tip:0, fee:0, disc:0,
+              ocrTotal:null, ocrSub:null, mode: state.mode, created: Date.now() };
+    imgFile = null;
+    if(imgURL){ URL.revokeObjectURL(imgURL); imgURL = null; }
+    $("#previewImg").removeAttribute("src");
+    $("#preview").style.display = "none"; $("#scanNotice").innerHTML = "";
+    boot(); save();
+  });
+
+  // engine paths
+  const uMap = { uScript:"script", uWorker:"worker", uCore:"core", uLang:"lang" };
+  Object.keys(uMap).forEach(id => { $("#" + id).value = urls[uMap[id]]; });
+  $("#saveUrls").addEventListener("click", () => {
+    Object.keys(uMap).forEach(id => { urls[uMap[id]] = $("#" + id).value.trim() || DEFAULT_URLS[uMap[id]]; });
+    localStorage.setItem(LS_URLS, JSON.stringify(urls));
+    worker = null;
+    toast("Saved. Scan again to use them.");
+  });
+  $("#resetUrls").addEventListener("click", () => {
+    urls = Object.assign({}, DEFAULT_URLS);
+    Object.keys(uMap).forEach(id => { $("#" + id).value = urls[uMap[id]]; });
+    localStorage.removeItem(LS_URLS); worker = null; toast("Back to defaults");
+  });
+
+  $("#flushBtn").addEventListener("click", async () => {
+    try{
+      if(window.caches){
+        const ks = await caches.keys();
+        await Promise.all(ks.map(k => caches.delete(k)));
+      }
+      if(navigator.serviceWorker){
+        const regs = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(regs.map(r => r.unregister()));
+      }
+      toast("Cleared. Reloading…");
+      setTimeout(() => location.reload(true), 700);
+    }catch(e){ toast("Couldn't clear: " + e.name); }
+  });
+
+  $("#diagBtn").addEventListener("click", async () => {
+    const out = $("#diagOut");
+    out.innerHTML = "";
+    const rows = [];
+    rows.push(["Build", BUILD]);
+    rows.push(["Opened from", location.protocol === "file:" ? "a file on disk" : location.protocol.replace(":","")]);
+    rows.push(["Reading files", typeof FileReader !== "undefined" ? "yes" : "no"]);
+    rows.push(["Image decoding", typeof createImageBitmap === "function" ? "createImageBitmap" : "fallback"]);
+    let workerOk = "no";
+    try{
+      const b = new Blob(["self.close()"], { type: "text/javascript" });
+      const w = new Worker(URL.createObjectURL(b));
+      w.terminate(); workerOk = "yes";
+    }catch(e){ workerOk = "blocked (" + e.name + ")"; }
+    rows.push(["Background workers", workerOk]);
+    rows.push(["WebAssembly", typeof WebAssembly !== "undefined" ? "yes" : "no"]);
+    rows.push(["Engine loaded", window.Tesseract ? "yes" : "not yet"]);
+    rows.push(["Network", navigator.onLine ? "online" : "offline"]);
+    rows.push(["Service worker", navigator.serviceWorker && navigator.serviceWorker.controller ? "active" : "none"]);
+    rows.push(["Saves between visits", (() => { try{ localStorage.setItem("_t","1"); localStorage.removeItem("_t"); return "yes"; }catch(e){ return "no"; } })()]);
+    const d = document.createElement("div");
+    d.className = "notice" + (workerOk === "yes" ? " ok" : "");
+    d.style.fontSize = "12px";
+    d.innerHTML = rows.map(r => "<div>" + r[0] + " — <b>" + esc(r[1]) + "</b></div>").join("");
+    out.appendChild(d);
+  });
+
+  $("#dlSw").addEventListener("click", () => {
+    download("sw.js", SW_SOURCE, "text/javascript");
+    setTimeout(() => download("manifest.webmanifest", JSON.stringify(manifestObject(), null, 2), "application/manifest+json"), 400);
+    toast("Put both next to this HTML file");
+  });
+
+  window.addEventListener("beforeunload", save);
+}
+
+/* ---------- PWA plumbing ---------- */
+function iconDataUrl(size){
+  const c = document.createElement("canvas");
+  c.width = c.height = size;
+  const x = c.getContext("2d");
+  x.fillStyle = "#E9E7E0"; x.fillRect(0, 0, size, size);
+  x.fillStyle = "#3B34A0";
+  const m = size * 0.18, w = size - m * 2;
+  x.fillRect(m, m, w, w);
+  x.fillStyle = "#F6F4EE";
+  const rows = 5, rh = w / (rows * 2 + 1);
+  for(let i = 0; i < rows; i++){
+    const y = m + rh * (i * 2 + 1);
+    const len = i === rows - 1 ? w * 0.8 : w * (0.75 - i * 0.08);
+    x.fillRect(m + w * 0.1, y, len * 0.62, rh * 0.7);
+    x.fillRect(m + w - w * 0.1 - len * 0.22, y, len * 0.22, rh * 0.7);
+  }
+  return c.toDataURL("image/png");
+}
+function manifestObject(){
+  return {
+    name: "Split the Tab",
+    short_name: "Split",
+    description: "Scan a receipt and split it. Entirely on your device.",
+    start_url: ".",
+    scope: ".",
+    display: "standalone",
+    orientation: "portrait",
+    background_color: "#E9E7E0",
+    theme_color: "#E9E7E0",
+    share_target: {
+      action: "./share",
+      method: "POST",
+      enctype: "multipart/form-data",
+      params: {
+        files: [{ name: "photo", accept: ["image/*"] }]
+      }
+    },
+    icons: [
+      { src: iconDataUrl(192), sizes: "192x192", type: "image/png", purpose: "any" },
+      { src: iconDataUrl(512), sizes: "512x512", type: "image/png", purpose: "any maskable" }
+    ]
+  };
+}
+const SW_SOURCE = `/* Split the Tab — offline cache. Drop next to index.html. */
+const CACHE = 'splittab-v4';
+const SHELL = ['./', './index.html', './manifest.webmanifest'];
+
+self.addEventListener('install', e => {
+  self.skipWaiting();
+  e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL).catch(() => {})));
+});
+
+self.addEventListener('activate', e => {
+  e.waitUntil(caches.keys().then(ks => Promise.all(
+    ks.filter(k => k !== CACHE).map(k => caches.delete(k))
+  )).then(() => self.clients.claim()));
+});
+
+self.addEventListener('message', e => {
+  if (e.data === 'flush') {
+    caches.keys().then(ks => Promise.all(ks.map(k => caches.delete(k))));
+  }
+});
+
+self.addEventListener('fetch', e => {
+  const req = e.request;
+  const url = new URL(req.url);
+
+  // Photo shared in from another app. Stash it and bounce to the page;
+  // this is handled entirely in the worker, there is nowhere for it to be sent.
+  if (req.method === 'POST' && url.pathname.endsWith('/share')) {
+    e.respondWith((async () => {
+      try {
+        const form = await req.formData();
+        const file = form.get('photo') || form.get('image') || form.get('file');
+        if (file) {
+          const c = await caches.open('splittab-share');
+          await c.put('shared-photo', new Response(file, {
+            headers: {
+              'Content-Type': file.type || 'image/jpeg',
+              'X-Name': encodeURIComponent(file.name || 'shared.jpg')
+            }
+          }));
+        }
+      } catch (err) {}
+      return Response.redirect('./?shared=1', 303);
+    })());
+    return;
+  }
+
+  if (req.method !== 'GET') return;
+  const sameOrigin = url.origin === location.origin;
+
+  // The app itself: network first, so a newer copy is picked up straight away.
+  // Falling back to cache keeps it working with no connection.
+  if (sameOrigin) {
+    e.respondWith(
+      fetch(req).then(res => {
+        if (res && res.ok) {
+          const copy = res.clone();
+          caches.open(CACHE).then(c => c.put(req, copy));
+        }
+        return res;
+      }).catch(() => caches.match(req).then(hit => {
+        if (hit) return hit;
+        // Only a page navigation should ever be answered with the page.
+        if (req.mode === 'navigate') return caches.match('./index.html');
+        return new Response('', { status: 504, statusText: 'Offline' });
+      }))
+    );
+    return;
+  }
+
+  // The recognition engine: cache first, it never changes.
+  if (/jsdelivr|unpkg|cdnjs|tessdata/.test(url.hostname)) {
+    e.respondWith(
+      caches.match(req).then(hit => hit || fetch(req).then(res => {
+        if (res && (res.ok || res.type === 'opaque')) {
+          const copy = res.clone();
+          caches.open(CACHE).then(c => c.put(req, copy));
+        }
+        return res;
+      }))
+    );
+  }
+});`;
+
+async function initPWA(){
+  // A real manifest file next to the page produces a proper installed app on Android.
+  // The generated data: manifest is the fallback for single-file use.
+  let linked = false;
+  if(location.protocol.startsWith("http")){
+    try{
+      const r = await fetch("./manifest.webmanifest", { method: "GET" });
+      if(r.ok){
+        const l = document.createElement("link");
+        l.rel = "manifest"; l.href = "./manifest.webmanifest";
+        document.head.appendChild(l);
+        linked = true;
+      }
+    }catch(e){}
+  }
+  if(!linked){
+    try{
+      const link = document.createElement("link");
+      link.rel = "manifest";
+      link.href = "data:application/manifest+json," + encodeURIComponent(JSON.stringify(manifestObject()));
+      document.head.appendChild(link);
+    }catch(e){}
+  }
+  if("serviceWorker" in navigator && location.protocol.startsWith("http")){
+    navigator.serviceWorker.register("./sw.js").catch(() => {});
+  }
+  let deferred = null;
+  const ios = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+              (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  const standalone = window.matchMedia("(display-mode: standalone)").matches ||
+                     navigator.standalone === true;
+  const hint = $("#installHint");
+  if(standalone){
+    hint.textContent = "Already installed — you're running it as an app.";
+  } else if(ios){
+    hint.innerHTML = "On iPhone and iPad, tap the <b>Share</b> button in Safari, then " +
+      "<b>Add to Home Screen</b>. Safari has no install button for the app to trigger. " +
+      "Installing also stops iOS clearing your saved bills after a week of not using it.";
+  }
+  window.addEventListener("beforeinstallprompt", e => {
+    e.preventDefault(); deferred = e;
+    const b = $("#installBtn"); b.disabled = false;
+    b.addEventListener("click", async () => {
+      b.disabled = true; deferred.prompt();
+      await deferred.userChoice; deferred = null;
+    }, { once: true });
+  });
+}
+
+/* ---------- boot ---------- */
+function boot(){
+  $("#curIn").value = state.currency;
+  $("#taxIn").value = plain(state.tax);
+  $("#tipIn").value = plain(state.tip);
+  $("#feeIn").value = plain(state.fee);
+  $("#discIn").value = plain(state.disc);
+  const r = $('input[name=mode][value="' + state.mode + '"]');
+  if(r) r.checked = true;
+  renderPeople(); renderItems(); recompute();
+}
+
+function fileProtocolWarning(){
+  if(location.protocol !== "file:") return;
+  const d = document.createElement("div");
+  d.className = "notice";
+  d.innerHTML = "<b>Opened straight from disk.</b> Photos, editing and splitting all work. " +
+    "Reading the receipt automatically won't — browsers block background workers on " +
+    "<code>file://</code> pages, and that's what runs the text recognition. " +
+    "Serve the folder over <code>localhost</code> or install it as an app to switch it on. " +
+    "<span style='color:var(--faded)'>Details under Settings → Running it offline.</span>";
+  $("#scanNotice").appendChild(d);
+}
+
+async function pickUpSharedPhoto(){
+  if(!/[?&]shared=1/.test(location.search)) return;
+  history.replaceState(null, "", location.pathname);
+  try{
+    const c = await caches.open("splittab-share");
+    const res = await c.match("shared-photo");
+    if(!res) return;
+    const blob = await res.blob();
+    await c.delete("shared-photo");
+    const name = decodeURIComponent(res.headers.get("X-Name") || "shared.jpg");
+    handleFile(new File([blob], name, { type: blob.type || "image/jpeg" }));
+  }catch(e){}
+}
+
+load();
+wire();
+boot();
+detectVendored();
+initPWA();
+fileProtocolWarning();
+pickUpSharedPhoto();
+</script>
+</body>
+</html>
