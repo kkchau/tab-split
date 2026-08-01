@@ -1,4 +1,4 @@
-# Split the Tab
+# Tab Split
 
 Photograph a receipt, let OCR pull out the line items, tick off who had what,
 and see what everyone owes. No build step, no backend, no accounts. The image

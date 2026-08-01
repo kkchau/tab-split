@@ -1,6 +1,6 @@
 {
-  "name": "Split the Tab",
-  "short_name": "Split",
+  "name": "Tab Split",
+  "short_name": "Tab Split",
   "description": "Scan a receipt and split it. Entirely on your device.",
   "start_url": ".",
   "scope": ".",

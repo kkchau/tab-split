@@ -3,12 +3,12 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Split the Tab</title>
+<title>Tab Split</title>
 <meta name="description" content="Scan a receipt, assign each line to whoever ate it, split tax and tip. Runs entirely on your device.">
 <meta name="theme-color" content="#E9E7E0">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<meta name="apple-mobile-web-app-title" content="Split the Tab">
+<meta name="apple-mobile-web-app-title" content="Tab Split">
 <link rel="manifest" href="./manifest.webmanifest">
 <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
 <link rel="icon" href="./icons/icon-192.png">
@@ -290,7 +290,7 @@ details.tools[open] summary::before{content:"– ";}
 <main class="sheet">
 
   <header class="masthead">
-    <h1>Split<br>the Tab</h1>
+    <h1>Tab<br>Split</h1>
     <div class="sub">Scan · Assign · Settle</div>
   </header>
 
@@ -421,7 +421,7 @@ details.tools[open] summary::before{content:"– ";}
 <script>
 "use strict";
 /* ============================================================
-   Split the Tab — offline receipt splitter
+   Tab Split — offline receipt splitter
    No network calls except a one-time fetch of the OCR engine.
    ============================================================ */
 
@@ -872,7 +872,7 @@ function slipText(r, i){
 }
 function fullText(){
   const r = compute();
-  const out = ["SPLIT THE TAB", new Date(state.created).toLocaleDateString(), ""];
+  const out = ["TAB SPLIT", new Date(state.created).toLocaleDateString(), ""];
   r.people.forEach((p,i) => { out.push(slipText(r, i), ""); });
   out.push("Subtotal " + money(r.sub) + " · Tax " + money(state.tax) + " · Tip " + money(state.tip));
   out.push("TOTAL " + money(r.grand));
@@ -1358,7 +1358,7 @@ function wire(){
   $("#shareAll").addEventListener("click", async () => {
     const text = fullText();
     if(navigator.share){
-      try{ await navigator.share({ title: "Split the Tab", text }); return; }catch(e){ if(e.name === "AbortError") return; }
+      try{ await navigator.share({ title: "Tab Split", text }); return; }catch(e){ if(e.name === "AbortError") return; }
     }
     copy(text);
   });
@@ -1431,8 +1431,8 @@ function iconDataUrl(size){
 }
 function manifestObject(){
   return {
-    name: "Split the Tab",
-    short_name: "Split",
+    name: "Tab Split",
+    short_name: "Tab Split",
     description: "Scan a receipt and split it. Entirely on your device.",
     start_url: ".",
     scope: ".",

@@ -1,4 +1,4 @@
-/* Split the Tab — offline cache. Drop next to index.html. */
+/* Tab Split — offline cache. Drop next to index.html. */
 const CACHE = 'splittab-v4';
 const SHELL = ['./', './index.html', './manifest.webmanifest'];
 
