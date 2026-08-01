@@ -90,6 +90,8 @@ button{cursor:pointer}
 .btn.ghost{border-color:var(--rule);color:var(--faded)}
 .btn.ghost:hover{background:var(--rule);color:var(--ink)}
 .btn.sm{padding:5px 9px;font-size:12px;letter-spacing:.1em}
+.btn.danger{border-color:var(--stamp);color:var(--stamp)}
+.btn.danger:hover{background:var(--stamp);border-color:var(--stamp);color:var(--sheet)}
 .btn[disabled]{opacity:.4;pointer-events:none}
 .row-btns{display:flex;flex-wrap:wrap;gap:8px}
 input[type=text],input[type=number],select{
@@ -385,13 +387,14 @@ details.tools[open] summary::before{content:"– ";}
 
   <!-- ============ TOOLS ============ -->
   <details class="tools">
-    <summary>Install &amp; saved bills</summary>
+    <summary>Install, saved bills &amp; reset</summary>
 
     <div class="grp">
       <div class="row-btns">
         <button class="btn sm primary" id="installBtn" disabled>Install app</button>
         <button class="btn sm" id="saveJson">Save a copy</button>
         <button class="btn sm" id="loadJson">Open a saved bill</button>
+        <button class="btn sm danger" id="resetAll">Reset everything</button>
         <input type="file" id="jsonFile" accept="application/json,.json" class="vh">
       </div>
       <p id="installHint">On iPhone: Share → Add to Home Screen. On Android/desktop Chrome: use Install, or the icon in the address bar.</p>
@@ -1382,6 +1385,32 @@ function wire(){
     };
     fr.readAsText(f);
   });
+
+  $("#resetAll").addEventListener("click", () => {
+    if(!confirm("Reset everything? Everyone, every line, the receipt and the totals are cleared. " +
+                "There is no undo — use Save a copy first if you might want this bill back.")) return;
+    // The currency survives: there is no longer a control to set it back.
+    state = {
+      currency: state.currency,
+      people: [], items: [],
+      tax: 0, tip: 0, fee: 0, disc: 0,
+      ocrTotal: null, ocrSub: null,
+      mode: "prop",
+      created: Date.now()
+    };
+    if(imgURL){ URL.revokeObjectURL(imgURL); imgURL = null; }
+    imgFile = null;
+    rotation = 0;
+    const im = $("#previewImg");
+    im.removeAttribute("src");
+    im.style.transform = "";
+    $("#preview").style.display = "none";
+    $("#scanNotice").innerHTML = "";
+    $("#newName").value = "";
+    boot(); save();
+    toast("Everything cleared");
+  });
+
   window.addEventListener("beforeunload", save);
 }
 
