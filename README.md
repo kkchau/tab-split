@@ -14,7 +14,7 @@ workflow to run.
 3. A minute later the site is at `https://<user>.github.io/<repo>/`. Every
    later push to that branch republishes it.
 
-`.nojekyll` is what stops Jekyll from swallowing `_headers` and any future
+`.nojekyll` is what stops Jekyll from processing the site and swallowing any
 underscore-prefixed path, so keep it.
 
 <details>
@@ -63,18 +63,15 @@ Every path in the app is relative, so a project page under
 the manifest, the service worker scope and the share target all land inside the
 subdirectory.
 
-### Two things GitHub Pages does not do
+You cannot set response headers on Pages, so caching is whatever Pages decides.
+It does not matter much here: `sw.js` is network-first for the app shell, so a
+reload picks up a new `index.html` as soon as one is served.
 
-- **`_headers` is ignored.** It is a Netlify file, kept here so that host also
-  works. Pages sends its own caching headers; `sw.js` is network-first for the
-  app shell, so a reload picks up a new `index.html` anyway. If a stale copy
-  sticks, use Settings → Force update in the app.
-- **`/.well-known/` sits at the domain root, not the project path.** That only
-  matters for the APK route below.
+`/.well-known/` sits at the domain root rather than the project path, which
+only matters for the APK route below.
 
 ## Other hosts
 
-**Netlify** — drag the folder onto https://app.netlify.com/drop.
 **Cloudflare Pages / Vercel / S3** — upload as a static site, no framework
 preset, no build command, output directory `.`.
 
@@ -124,4 +121,3 @@ You can also set the paths by hand under Settings.
     manifest.webmanifest          install metadata
     icons/                        app icons
     .nojekyll                     serve files as-is on GitHub Pages
-    _headers                      Netlify cache rule; ignored by Pages
